@@ -113,13 +113,105 @@ tree4.pack()
 
 def insert_to_table(router, tree):
     for key in router.keys():
-        tree.insert("", "end", values=(router[key], "<><><>"), tags = ("green", ))
+        tree.insert("", "end", values=(router[key][0], "<><><>"), tags = ("green", ))
 
 insert_to_table(dictionary.router1, tree1)
 insert_to_table(dictionary.router2, tree2)
 insert_to_table(dictionary.router3, tree3)
 insert_to_table(dictionary.router4, tree4)
 
+def mpsn_func(ip, tree, name, moxa, rx, tx,  updatetime, IT, add_in_table, rem_num):
+    curenttime = datetime.datetime.today()
+    text = "%s %s" %(name, strftime("%Y-%m-%d %H:%M:%S", gmtime()))
+    tree.heading("two", text=text)
+    tree.column("two",minwidth=0,width=210, stretch=NO)
+    remember = []
+    upd_file = open("/sintez/sintez/moxa_monitoring/parameters/updatetime%s.pkl" %rem_num, "rb")
+    updatetime = pickle.load(upd_file)
+    upd_file.close()
+    rx_file = open("/sintez/sintez/moxa_monitoring/parameters/rx%s.pkl" %rem_num, "rb")
+    rx = pickle.load(rx_file)
+    rx_file.close()
+    tx_file = open("/sintez/sintez/moxa_monitoring/parameters/tx%s.pkl" %rem_num, "rb")
+    tx = pickle.load(tx_file)
+    tx_file.close()
+    for key in moxa.keys():
+        port = key+1
+        curentrx = subprocess.check_output(['snmpget', '-c', 'public', '-v', '2c', '-O', 'qv', '%s' % ip, '.1.3.6.1.2.1.2.2.1.10.%s' % port]).rstrip()
+        curenttx = subprocess.check_output(['snmpget', '-c', 'public', '-v', '2c', '-O', 'qv', '%s' % ip, '.1.3.6.1.2.1.2.2.1.16.%s' % port]).rstrip()
+        if curentrx != rx[key] or curenttx != tx[key]:
+            updatetime[key] = curenttime
+            rx[key] = curentrx
+            tx[key] = curenttx
+            rx_file = open("/sintez/sintez/moxa_monitoring/parameters/rx%s.pkl" %rem_num, "wb")
+            pickle.dump(rx, rx_file)
+            rx_file.close()
+            tx_file = open("/sintez/sintez/moxa_monitoring/parameters/tx%s.pkl" %rem_num, "wb")
+            pickle.dump(tx, tx_file)
+            tx_file.close()
+            if curenttx != '0' and curentrx != '0':
+                state = '<<< >>>'
+                remember.append(key)
+                lst = [key, moxa[key], state, 'green']
+                d = {key: lst}
+                add_in_table.update(d)
+                upd_file = open("/sintez/sintez/moxa_monitoring/parameters/updatetime%s.pkl" %rem_num, "wb")
+                pickle.dump(updatetime, upd_file)
+                upd_file.close()
+            if curentrx != '0' and key not in remember:
+                state = '<<<'
+                lst = [key, moxa[key], state, 'green']
+                d = {key: lst}
+                add_in_table.update(d)
+                upd_file = open("/sintez/sintez/moxa_monitoring/parameters/updatetime%s.pkl" %rem_num, "wb")
+                pickle.dump(updatetime, upd_file)
+                upd_file.close()
+            if curenttx != '0' and key not in remember:
+                state = '>>>'
+                lst = [key, moxa[key], state, 'green']
+                d = {key: lst}
+                add_in_table.update(d)
+                upd_file = open("/sintez/sintez/moxa_monitoring/parameters/updatetime%s.pkl" %rem_num, "wb")
+                pickle.dump(updatetime, upd_file)
+                upd_file.close()
+	    IT[key] = curenttime - updatetime[key]
+        if IT[key] > datetime.timedelta(minutes=1) and IT[key] < datetime.timedelta(hours=12) and  moxa[key] !="":
+            upd_file = open("/sintez/sintez/moxa_monitoring/parameters/updatetime%s.pkl" %rem_num, "wb")
+            pickle.dump(updatetime, upd_file)
+            upd_file.close()
+            state = str(updatetime[key]).split(".")[0]
+            lst = [key, moxa[key], state, 'red']
+            d = {key: lst}
+            add_in_table.update(d)
+        if IT[key] > datetime.timedelta(hours=12) and  moxa[key] !="":
+            state = str(updatetime[key]).split(".")[0]
+            lst = [key, moxa[key], state, 'yellow']
+            d = {key: lst}
+            add_in_table.update(d)
+        if moxa[key] == "":
+            lst = [key, "", "", 'green']
+            d = {key: lst}
+            add_in_table.update(d)
+        if datetime.timedelta(minutes=2) < IT[key] < datetime.timedelta(minutes =3) and moxa[key] != "" and moxa[key] !="Объединенная РЛИ для ВЕГА" :
+            logit.warning('%s - %s пропал. Время пропадания - %s' %(name, moxa[key], updatetime[key].replace(microsecond=0)))
+            os.system('/opt/csw/bin/mpg123 /sintez/sintez/moxa_monitoring/sound.mp3')
+        if datetime.timedelta(minutes=30) < IT[key] < datetime.timedelta(minutes =31) and  moxa[key] =="Объединенная РЛИ для ВЕГА" :
+            logit.warning('%s - %s пропал. Время пропадания - %s' %(name, moxa[key], updatetime[key].replace(microsecond=0)))
+            os.system('/opt/csw/bin/mpg123 /sintez/sintez/moxa_monitoring/sound.mp3')
+    add_in_table = collections.OrderedDict(sorted(add_in_table.items()))
+    for key in add_in_table.keys():
+	    num = key -1
+            r = tree.get_children()[num]
+            tree.item(r, values=(str(add_in_table[key][0]), str(add_in_table[key][1]), str(add_in_table[key][2])), tags=(add_in_table[key][3],))
+
+def clean_func5():
+    while True:
+        try:
+            moxa_func('moxa1', tree5, "MOXA-5", values.moxa5, values.rx5, values.tx5, values.updatetime5, values.IT5,
+                      values.add_in_table5, 5)
+            time.sleep(a)
+        except:
+            pass
 
 
 root.mainloop()
